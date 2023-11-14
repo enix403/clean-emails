@@ -41,17 +41,32 @@ func readConfig() (*AppConfig, error) {
 }
 
 var db *sql.DB
+var config *AppConfig
 
 func startApp() {
-	
+	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"",
+		config.EmailColumnName, config.TableName)
+	rows, err := db.Query(query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var email string
+	for rows.Next() {
+		rows.Scan(&email)
+		fmt.Println(email)
+	}
 }
 
 func main() {
-	config, err := readConfig()
+	localConfig, err := readConfig()
 	if err != nil {
 		fmt.Printf("Fail to read config file: %v\n", err)
 		os.Exit(1)
 	}
+
+	config = localConfig
 
 	psqlInfo := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",

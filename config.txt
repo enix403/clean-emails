@@ -4,4 +4,4 @@ db_password = user1
 db_host = localhost
 db_port = 8554
 table_name = app_table
-email_column_name = email
+email_column_name = Email
