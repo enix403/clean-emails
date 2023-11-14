@@ -48,6 +48,7 @@ func readConfig(path string) *AppConfig {
 var db *sql.DB
 var config *AppConfig
 
+/*
 func emailList() {
 	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"",
 		config.EmailColumnName, config.TableName)
@@ -63,6 +64,7 @@ func emailList() {
 		fmt.Println(email)
 	}
 }
+*/
 
 func createDBConnection() {
 	psqlInfo := fmt.Sprintf(
@@ -76,6 +78,14 @@ func createDBConnection() {
 	}
 
 	db = conn
+}
+
+func dedupEmails() {
+	fmt.Println("De-duping")
+}
+
+func validateEmails(enableSMPTCheck bool) {
+	fmt.Printf("Validating with checks = %v\n", enableSMPTCheck)
 }
 
 func main() {
@@ -96,13 +106,17 @@ func main() {
 		Required: false,
 	})
 
+	enableSMPTPtr := parser.Flag("", "enable-smtp", &argparse.Options{
+		Help:     "Enable SMTP checks. Effective with --validate option only.",
+		Required: false,
+	})
+
 	err := parser.Parse(os.Args)
 	if err != nil {
 		fmt.Print(parser.Usage(err))
 		os.Exit(1)
 	}
 
-	configPath := *configPathPtr
 	dedup := *dedupPtr
 	validate := *validatePtr
 
@@ -111,8 +125,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	var configPath string = ""
+	if configPathPtr != nil {
+		configPath = *configPathPtr
+	}
+
+	if configPath == "" {
+		fmt.Println("Provide config file path")
+		os.Exit(1)
+	}
+
 	// Set global config
 	config = readConfig(configPath)
 
 	createDBConnection()
+
+	if dedup {
+		dedupEmails()
+	} else { // validate
+		validateEmails(*enableSMPTPtr)
+	}
 }
