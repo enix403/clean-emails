@@ -81,7 +81,32 @@ func createDBConnection() {
 }
 
 func dedupEmails() {
-	fmt.Println("De-duping")
+	query := fmt.Sprintf(`
+			DELETE FROM "%s"
+			WHERE ctid IN (
+			  SELECT ctid
+			  FROM (
+			    SELECT
+			      ctid,
+			      ROW_NUMBER() OVER (PARTITION BY "%s" ORDER BY ctid) AS row_num
+			    FROM
+			      "%s"
+			  ) AS duplicates
+			  WHERE row_num > 1
+			);
+		`,
+		config.TableName,
+		config.EmailColumnName,
+		config.TableName,
+	)
+
+	rows, err := db.Query(query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("Removed duplicates")
 }
 
 func validateEmails(enableSMPTCheck bool) {

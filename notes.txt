@@ -19,6 +19,24 @@ fmt.Println(string(b))
 
 ------------------------------------------------------------------------------------------
 
+DELETE FROM "app_table"
+WHERE ctid IN (
+  SELECT ctid
+  FROM (
+    SELECT
+      ctid,
+      ROW_NUMBER() OVER (PARTITION BY "Email" ORDER BY ctid) AS row_num
+    FROM
+      "app_table"
+  ) AS duplicates
+  WHERE row_num > 1
+);
+
+
+------------------------------------------------------------------------------------------
+
 cleanemails config.txt [--debug] --dedup
 cleanemails config.txt [--debug] --validate
 cleanemails config.txt [--debug] --validate --enable-smtp
+
+
