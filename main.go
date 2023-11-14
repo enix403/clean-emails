@@ -7,6 +7,9 @@ import (
 
 	_ "github.com/lib/pq"
 	"gopkg.in/ini.v1"
+
+	"github.com/cqroot/prompt"
+	"github.com/cqroot/prompt/choose"
 )
 
 type AppConfig struct {
@@ -43,7 +46,7 @@ func readConfig() (*AppConfig, error) {
 var db *sql.DB
 var config *AppConfig
 
-func startApp() {
+func emailList() {
 	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"",
 		config.EmailColumnName, config.TableName)
 	rows, err := db.Query(query)
@@ -57,6 +60,15 @@ func startApp() {
 		rows.Scan(&email)
 		fmt.Println(email)
 	}
+}
+
+func startApp() {
+	selection, _ := prompt.New().Ask("Select Action:").Choose(
+		[]string{"De-Duplicate Emails", "Validate Emails", "Validate Emails With SMTP Check"},
+		choose.WithTheme(choose.ThemeArrow),
+	)
+
+	fmt.Printf("{ %s }\n", selection)
 }
 
 func main() {
