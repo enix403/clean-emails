@@ -1,0 +1,18 @@
+email := "example@exampledomain2.org"
+
+ret, err := verifier.Verify(email)
+if err != nil {
+    fmt.Println("verify email address failed, error is: ", err)
+    return
+}
+if !ret.Syntax.Valid {
+    fmt.Println("email address syntax is invalid")
+    return
+}
+
+b, err := json.Marshal(ret)
+if err != nil {
+    fmt.Println(err)
+    return
+}
+fmt.Println(string(b))
