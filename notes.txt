@@ -16,3 +16,9 @@ if err != nil {
     return
 }
 fmt.Println(string(b))
+
+------------------------------------------------------------------------------------------
+
+cleanemails config.txt [--debug] --dedup
+cleanemails config.txt [--debug] --validate
+cleanemails config.txt [--debug] --validate --enable-smtp

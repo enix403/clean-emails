@@ -8,9 +8,10 @@ import (
 	_ "github.com/lib/pq"
 	"gopkg.in/ini.v1"
 
-	"github.com/cqroot/prompt"
-	"github.com/cqroot/prompt/choose"
+	"github.com/akamensky/argparse"
 )
+
+func take[T any](_ T) {}
 
 type AppConfig struct {
 	DbName          string
@@ -22,10 +23,11 @@ type AppConfig struct {
 	EmailColumnName string
 }
 
-func readConfig() (*AppConfig, error) {
-	cfg, err := ini.Load("config.txt")
+func readConfig(path string) *AppConfig {
+	cfg, err := ini.Load(path)
 	if err != nil {
-		return nil, err
+		fmt.Printf("Fail to read config file: %v\n", err)
+		os.Exit(1)
 	}
 
 	rootSection := cfg.Section("")
@@ -40,7 +42,7 @@ func readConfig() (*AppConfig, error) {
 	config.TableName = rootSection.Key("table_name").String()
 	config.EmailColumnName = rootSection.Key("email_column_name").String()
 
-	return config, nil
+	return config
 }
 
 var db *sql.DB
@@ -62,24 +64,7 @@ func emailList() {
 	}
 }
 
-func startApp() {
-	selection, _ := prompt.New().Ask("Select Action:").Choose(
-		[]string{"De-Duplicate Emails", "Validate Emails", "Validate Emails With SMTP Check"},
-		choose.WithTheme(choose.ThemeArrow),
-	)
-
-	fmt.Printf("{ %s }\n", selection)
-}
-
-func main() {
-	localConfig, err := readConfig()
-	if err != nil {
-		fmt.Printf("Fail to read config file: %v\n", err)
-		os.Exit(1)
-	}
-
-	config = localConfig
-
+func createDBConnection() {
 	psqlInfo := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		config.DbHost, config.DbPort, config.DbUser, config.DbPassword, config.DbName)
@@ -91,6 +76,43 @@ func main() {
 	}
 
 	db = conn
+}
 
-	startApp()
+func main() {
+	parser := argparse.NewParser("print", "Prints provided string to stdout")
+
+	configPathPtr := parser.StringPositional(&argparse.Options{
+		Help:     "Path of config file",
+		Required: true,
+	})
+
+	dedupPtr := parser.Flag("p", "dedup", &argparse.Options{
+		Help:     "Remove duplicate emails",
+		Required: false,
+	})
+
+	validatePtr := parser.Flag("v", "validate", &argparse.Options{
+		Help:     "Validate existing emails",
+		Required: false,
+	})
+
+	err := parser.Parse(os.Args)
+	if err != nil {
+		fmt.Print(parser.Usage(err))
+		os.Exit(1)
+	}
+
+	configPath := *configPathPtr
+	dedup := *dedupPtr
+	validate := *validatePtr
+
+	if validate == dedup {
+		fmt.Println("Provide exacty one of --validate and --dedup flags")
+		os.Exit(1)
+	}
+
+	// Set global config
+	config = readConfig(configPath)
+
+	createDBConnection()
 }

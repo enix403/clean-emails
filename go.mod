@@ -4,6 +4,7 @@ go 1.21.4
 
 require (
 	github.com/AfterShip/email-verifier v1.3.3 // indirect
+	github.com/akamensky/argparse v1.4.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/bubbles v0.16.1 // indirect
