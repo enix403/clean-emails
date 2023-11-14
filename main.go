@@ -1,9 +1,11 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 
+	_ "github.com/lib/pq"
 	"gopkg.in/ini.v1"
 )
 
@@ -38,10 +40,30 @@ func readConfig() (*AppConfig, error) {
 	return config, nil
 }
 
+var db *sql.DB
+
+func startApp() {
+	
+}
+
 func main() {
-	_, err := readConfig()
+	config, err := readConfig()
 	if err != nil {
 		fmt.Printf("Fail to read config file: %v\n", err)
 		os.Exit(1)
 	}
+
+	psqlInfo := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		config.DbHost, config.DbPort, config.DbUser, config.DbPassword, config.DbName)
+
+	conn, err := sql.Open("postgres", psqlInfo)
+	if err != nil {
+		fmt.Printf("Fail to connect to the database: %v\n", err)
+		os.Exit(1)
+	}
+
+	db = conn
+
+	startApp()
 }
