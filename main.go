@@ -48,24 +48,6 @@ func readConfig(path string) *AppConfig {
 var db *sql.DB
 var config *AppConfig
 
-/*
-func emailList() {
-	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"",
-		config.EmailColumnName, config.TableName)
-	rows, err := db.Query(query)
-	defer rows.Close()
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	var email string
-	for rows.Next() {
-		rows.Scan(&email)
-		fmt.Println(email)
-	}
-}
-*/
-
 func createDBConnection() {
 	psqlInfo := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
@@ -80,7 +62,27 @@ func createDBConnection() {
 	db = conn
 }
 
+func countEmails() int {
+	query := fmt.Sprintf("SELECT COUNT(*) from \"%s\"", config.TableName)
+	rows, err := db.Query(query)
+	defer rows.Close()
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for rows.Next() {
+		var count int
+		rows.Scan(&count)
+		return count
+	}
+
+	return 0
+}
+
 func dedupEmails() {
+	countBefore := countEmails()
 	query := fmt.Sprintf(`
 			DELETE FROM "%s"
 			WHERE ctid IN (
@@ -106,7 +108,11 @@ func dedupEmails() {
 		fmt.Println(err)
 	}
 
-	fmt.Println("Removed duplicates")
+	countAfter := countEmails()
+
+	numRemoved := countBefore - countAfter
+
+	fmt.Printf("Removed duplicates: %d row(s) deleted\n", numRemoved)
 }
 
 func validateEmails(enableSMPTCheck bool) {

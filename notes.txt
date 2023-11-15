@@ -19,6 +19,24 @@ fmt.Println(string(b))
 
 ------------------------------------------------------------------------------------------
 
+func emailList() {
+  query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"",
+    config.EmailColumnName, config.TableName)
+  rows, err := db.Query(query)
+  defer rows.Close()
+  if err != nil {
+    fmt.Println(err)
+  }
+
+  var email string
+  for rows.Next() {
+    rows.Scan(&email)
+    fmt.Println(email)
+  }
+}
+
+------------------------------------------------------------------------------------------
+
 DELETE FROM "app_table"
 WHERE ctid IN (
   SELECT ctid
