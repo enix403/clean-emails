@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	// "encoding/json"
 
 	_ "github.com/lib/pq"
 	"gopkg.in/ini.v1"
@@ -161,7 +162,15 @@ func validateEmail(email string) FailureMask {
 		return VFAIL_NULL
 	}
 
-	ret, _ := verifier.Verify(email)
+	ret, err := verifier.Verify(email)
+	fmt.Println(err)
+
+	// b, err := json.Marshal(ret)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
+	// fmt.Println(string(b))
 
 	if !ret.Syntax.Valid {
 		return VFAIL_SYNTAX
@@ -170,7 +179,7 @@ func validateEmail(email string) FailureMask {
 	var mask FailureMask = 0
 
 	if !ret.HasMxRecords {
-		mask |= VFAIL_MX
+		return VFAIL_MX
 	}
 
 	if ret.Disposable {
@@ -188,10 +197,14 @@ func validateEmail(email string) FailureMask {
 	return mask
 }
 
-func validateAction(enableSMPTCheck bool) {
+func validateAction(enableSMPTCheck bool, proxy string) {
 	if enableSMPTCheck {
 		verifier.EnableSMTPCheck()
 		verifier.EnableCatchAllCheck()
+	}
+
+	if proxy != "" {
+		verifier.Proxy(proxy)
 	}
 
 	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"", config.EmailColumnName, config.TableName)
@@ -206,15 +219,19 @@ func validateAction(enableSMPTCheck bool) {
 		var email string
 		rows.Scan(&email)
 
+		email = "cooooooooooooooooooooooool@yahoo.com"
+
 		if failures := validateEmail(email); failures != 0 {
 			fmt.Printf("%s -> %s\n", email, failures.ToReadable())
 		}
+
+		break
 	}
 
 }
 
 func main() {
-	parser := argparse.NewParser("print", "Prints provided string to stdout")
+	parser := argparse.NewParser("clean-emails", "Email Cleaner")
 
 	configPathPtr := parser.StringPositional(&argparse.Options{
 		Help:     "Path of config file",
@@ -236,11 +253,25 @@ func main() {
 		Required: false,
 	})
 
+	// This sets a SOCKS5 proxy to verify the email.
+	// Value has to be in the format: "socks5://user:password@127.0.0.1:1080?timeout=5s".
+	// The protocol could be socks5, socks4 and socks4a.
+	proxyPtr := parser.String("", "proxy", &argparse.Options{
+		Help:     "SOCKS proxy for SMPT checks. Effective with --enable-smtp option only.",
+		Required: false,
+	})
+
 	err := parser.Parse(os.Args)
 	if err != nil {
 		fmt.Print(parser.Usage(err))
 		os.Exit(1)
 	}
+
+	//fmt.Printf("configPath -> %v\n", *configPathPtr)
+	//fmt.Printf("dedup -> %v\n", *dedupPtr)
+	//fmt.Printf("validate -> %v\n", *validatePtr)
+	//fmt.Printf("enableSMPT -> %v\n", *enableSMPTPtr)
+	//fmt.Printf("proxy -> %v\n", *proxyPtr)
 
 	dedup := *dedupPtr
 	validate := *validatePtr
@@ -268,6 +299,10 @@ func main() {
 	if dedup {
 		dedupAction()
 	} else { // validate
-		validateAction(*enableSMPTPtr)
+		var proxy string = ""
+		if proxyPtr != nil {
+			proxy = *proxyPtr
+		}
+		validateAction(*enableSMPTPtr, proxy)
 	}
 }
