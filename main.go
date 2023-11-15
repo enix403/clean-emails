@@ -118,8 +118,11 @@ func dedupAction() {
 	fmt.Printf("Removed duplicates: %d row(s) deleted\n", numRemoved)
 }
 
+// 0 for valid
+type FailureMask uint32
+
 const (
-	VFAIL_NULL = 1 << iota
+	VFAIL_NULL FailureMask = 1 << iota
 	VFAIL_SYNTAX
 	VFAIL_MX
 	VFAIL_DISPOSABLE
@@ -127,7 +130,7 @@ const (
 	VFAIL_CATCH_ALL
 )
 
-var failBitToString = map[uint32]string{
+var failBitToString = map[FailureMask]string{
 	VFAIL_NULL:       "NullEmail",
 	VFAIL_SYNTAX:     "InvalidSyntax",
 	VFAIL_MX:         "NoMXRecord",
@@ -136,15 +139,11 @@ var failBitToString = map[uint32]string{
 	VFAIL_CATCH_ALL:  "CatchAllEmail",
 }
 
-// 0 for valid
-type FailureMask uint32
-
 func (mask FailureMask) ToReadable() string {
 	var sb strings.Builder
 
 	for failure, failureStr := range failBitToString {
-		converted := FailureMask(failure)
-		if mask&converted != 0 {
+		if mask&failure != 0 {
 			sb.WriteString(failureStr + "+")
 		}
 	}
