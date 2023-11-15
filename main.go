@@ -125,11 +125,33 @@ const (
 	VFAIL_DISPOSABLE
 	VFAIL_SMTP
 	VFAIL_CATCH_ALL
-	VFAIL_ERROR = 1 << 31
 )
+
+var failBitToString = map[uint32]string{
+	VFAIL_NULL:       "NullEmail",
+	VFAIL_SYNTAX:     "InvalidSyntax",
+	VFAIL_MX:         "NoMXRecord",
+	VFAIL_DISPOSABLE: "Disposable",
+	VFAIL_SMTP:       "SMTPFailed",
+	VFAIL_CATCH_ALL:  "CatchAllEmail",
+}
 
 // 0 for valid
 type FailureMask uint32
+
+func (mask FailureMask) ToReadable() string {
+	var sb strings.Builder
+
+	for failure, failureStr := range failBitToString {
+		converted := FailureMask(failure)
+		if mask&converted != 0 {
+			sb.WriteString(failureStr + "+")
+		}
+	}
+
+	final := strings.TrimRight(sb.String(), "+")
+	return final
+}
 
 var verifier = emailverifier.NewVerifier()
 
@@ -140,10 +162,7 @@ func validateEmail(email string) FailureMask {
 		return VFAIL_NULL
 	}
 
-	ret, err := verifier.Verify(email)
-	if err != nil {
-		return VFAIL_ERROR
-	}
+	ret, _ := verifier.Verify(email)
 
 	if !ret.Syntax.Valid {
 		return VFAIL_SYNTAX
@@ -188,9 +207,9 @@ func validateAction(enableSMPTCheck bool) {
 		var email string
 		rows.Scan(&email)
 
-		// if (validateEmail(email) != 0) {
-
-		// }
+		if failures := validateEmail(email); failures != 0 {
+			fmt.Printf("%s -> %s\n", email, failures.ToReadable())
+		}
 	}
 
 }
