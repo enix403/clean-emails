@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 
 	_ "github.com/lib/pq"
 	"gopkg.in/ini.v1"
 
+	emailverifier "github.com/AfterShip/email-verifier"
 	"github.com/akamensky/argparse"
 )
 
@@ -81,7 +83,7 @@ func countEmails() int {
 	return 0
 }
 
-func dedupEmails() {
+func dedupAction() {
 	countBefore := countEmails()
 	query := fmt.Sprintf(`
 			DELETE FROM "%s"
@@ -106,6 +108,7 @@ func dedupEmails() {
 	defer rows.Close()
 	if err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	countAfter := countEmails()
@@ -115,8 +118,81 @@ func dedupEmails() {
 	fmt.Printf("Removed duplicates: %d row(s) deleted\n", numRemoved)
 }
 
-func validateEmails(enableSMPTCheck bool) {
-	fmt.Printf("Validating with checks = %v\n", enableSMPTCheck)
+const (
+	VFAIL_NULL = 1 << iota
+	VFAIL_SYNTAX
+	VFAIL_MX
+	VFAIL_DISPOSABLE
+	VFAIL_SMTP
+	VFAIL_CATCH_ALL
+	VFAIL_ERROR = 1 << 31
+)
+
+// 0 for valid
+type FailureMask uint32
+
+var verifier = emailverifier.NewVerifier()
+
+func validateEmail(email string) FailureMask {
+	email = strings.TrimSpace(email)
+
+	if email == "" {
+		return VFAIL_NULL
+	}
+
+	ret, err := verifier.Verify(email)
+	if err != nil {
+		return VFAIL_ERROR
+	}
+
+	if !ret.Syntax.Valid {
+		return VFAIL_SYNTAX
+	}
+
+	var mask FailureMask = 0
+
+	if !ret.HasMxRecords {
+		mask |= VFAIL_MX
+	}
+
+	if ret.Disposable {
+		mask |= VFAIL_DISPOSABLE
+	}
+
+	if ret.Reachable == "no" {
+		mask |= VFAIL_SMTP
+	}
+
+	if ret.SMTP != nil && ret.SMTP.CatchAll {
+		mask |= VFAIL_CATCH_ALL
+	}
+
+	return mask
+}
+
+func validateAction(enableSMPTCheck bool) {
+	if enableSMPTCheck {
+		verifier.EnableSMTPCheck()
+		verifier.EnableCatchAllCheck()
+	}
+
+	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"", config.EmailColumnName, config.TableName)
+	rows, err := db.Query(query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for rows.Next() {
+		var email string
+		rows.Scan(&email)
+
+		// if (validateEmail(email) != 0) {
+
+		// }
+	}
+
 }
 
 func main() {
@@ -172,8 +248,8 @@ func main() {
 	createDBConnection()
 
 	if dedup {
-		dedupEmails()
+		dedupAction()
 	} else { // validate
-		validateEmails(*enableSMPTPtr)
+		validateAction(*enableSMPTPtr)
 	}
 }
