@@ -134,10 +134,9 @@ const (
 var failBitToString = map[FailureMask]string{
 	VFAIL_NULL:       "NullEmail",
 	VFAIL_SYNTAX:     "InvalidSyntax",
-	VFAIL_MX:         "NoMXRecord",
 	VFAIL_DISPOSABLE: "Disposable",
+	VFAIL_MX:         "NoMXRecord",
 	VFAIL_SMTP:       "SMTPFailed",
-	VFAIL_CATCH_ALL:  "CatchAllEmail",
 }
 
 func (mask FailureMask) ToReadable() string {
@@ -155,52 +154,39 @@ func (mask FailureMask) ToReadable() string {
 
 var verifier = emailverifier.NewVerifier()
 
-func validateEmail(email string) FailureMask {
+func validateEmail(email string, smtpEnabled bool) FailureMask {
 	email = strings.TrimSpace(email)
 
 	if email == "" {
 		return VFAIL_NULL
 	}
 
-	ret, err := verifier.Verify(email)
-	fmt.Println(err)
-
-	// b, err := json.Marshal(ret)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(1)
-	// }
-	// fmt.Println(string(b))
+	ret, _ := verifier.Verify(email)
 
 	if !ret.Syntax.Valid {
 		return VFAIL_SYNTAX
 	}
 
-	var mask FailureMask = 0
+	if ret.Disposable {
+		return VFAIL_DISPOSABLE
+	}
 
 	if !ret.HasMxRecords {
 		return VFAIL_MX
 	}
 
-	if ret.Disposable {
-		mask |= VFAIL_DISPOSABLE
+	if smtpEnabled {
+		if ret.SMTP == nil {
+			return VFAIL_SMTP
+		}
 	}
 
-	if ret.Reachable == "no" {
-		mask |= VFAIL_SMTP
-	}
-
-	if ret.SMTP != nil && ret.SMTP.CatchAll {
-		mask |= VFAIL_CATCH_ALL
-	}
-
-	return mask
+	return 0
 }
 
 func validateAction(enableSMPTCheck bool, proxy string) {
 	if enableSMPTCheck {
 		verifier.EnableSMTPCheck()
-		verifier.EnableCatchAllCheck()
 	}
 
 	if proxy != "" {
@@ -219,9 +205,9 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		var email string
 		rows.Scan(&email)
 
-		email = "cooooooooooooooooooooooool@yahoo.com"
+		email = "qateef2003@yahoo.com"
 
-		if failures := validateEmail(email); failures != 0 {
+		if failures := validateEmail(email, enableSMPTCheck); failures != 0 {
 			fmt.Printf("%s -> %s\n", email, failures.ToReadable())
 		}
 
