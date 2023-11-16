@@ -140,16 +140,31 @@ var failBitToString = map[FailureMask]string{
 }
 
 func (mask FailureMask) ToReadable() string {
-	var sb strings.Builder
-
-	for failure, failureStr := range failBitToString {
-		if mask&failure != 0 {
-			sb.WriteString(failureStr + "+")
-		}
+	val, ok := failBitToString[mask]
+	if !ok {
+		val = "Unknown error"
 	}
+	return val
+	/*
+		var sb strings.Builder
 
-	final := strings.TrimRight(sb.String(), "+")
-	return final
+		started := false
+
+		for failure, failureStr := range failBitToString {
+			if mask&failure != 0 {
+				if started {
+					sb.WriteByte('+')
+				} else {
+					started = true
+				}
+				sb.WriteString(failureStr)
+			}
+		}
+
+		// final := strings.TrimRight(sb.String(), "+")
+		return sb.String()
+	*/
+
 }
 
 var verifier = emailverifier.NewVerifier()
@@ -184,7 +199,62 @@ func validateEmail(email string, smtpEnabled bool) FailureMask {
 	return 0
 }
 
+const STATUS_COLUMN_NAME string = "email_status"
+
+func ensureStatusColumn() {
+	query := fmt.Sprintf("SELECT column_name FROM information_schema.columns where table_name = '%s'", config.TableName)
+	rows, err := db.Query(query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	found := false
+
+	for rows.Next() {
+		var colname string
+		rows.Scan(&colname)
+
+		if colname == STATUS_COLUMN_NAME {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		return
+	}
+
+	alter_query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN \"%s\" TEXT;", config.TableName, STATUS_COLUMN_NAME)
+	rows, err = db.Query(alter_query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func setEmailStatus(email string, status string) {
+	query := fmt.Sprintf(
+		"UPDATE app_table SET \"%s\" = '%s' WHERE \"%s\" = '%s'",
+		STATUS_COLUMN_NAME,
+		status,
+		config.EmailColumnName,
+		email)
+
+	rows, err := db.Query(query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
 func validateAction(enableSMPTCheck bool, proxy string) {
+
+	ensureStatusColumn()
+
 	if enableSMPTCheck {
 		verifier.EnableSMTPCheck()
 	}
@@ -205,13 +275,15 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		var email string
 		rows.Scan(&email)
 
-		email = "qateef2003@yahoo.com"
+		// email = "qateef2003@yahoo.com"
 
 		if failures := validateEmail(email, enableSMPTCheck); failures != 0 {
-			fmt.Printf("%s -> %s\n", email, failures.ToReadable())
+			reason := failures.ToReadable()
+			fmt.Printf("%s -> %s\n", email, reason)
+			setEmailStatus(email, "Invalid: " + reason)
+		} else {
+			setEmailStatus(email, "Valid")
 		}
-
-		break
 	}
 
 }
