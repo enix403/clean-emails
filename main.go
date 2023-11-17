@@ -3,9 +3,9 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"os"
-	"io"
 	"strings"
 	// "encoding/json"
 
@@ -13,8 +13,8 @@ import (
 	"gopkg.in/ini.v1"
 
 	emailverifier "github.com/AfterShip/email-verifier"
-	progressbar "github.com/schollz/progressbar/v3"
 	"github.com/akamensky/argparse"
+	progressbar "github.com/schollz/progressbar/v3"
 )
 
 func take[T any](_ T) {}
@@ -197,29 +197,39 @@ func (mask FailureMask) ToReadable() string {
 
 var verifier = emailverifier.NewVerifier()
 
-func validateEmail(email string, smtpEnabled bool) FailureMask {
+func validateEmail(email string, smtpEnabled bool, mxEnabled bool) FailureMask {
 	email = strings.TrimSpace(email)
 
 	if email == "" {
 		return VFAIL_NULL
 	}
 
-	ret, _ := verifier.Verify(email)
-
-	if !ret.Syntax.Valid {
+	syntax := verifier.ParseAddress(email)
+	if !syntax.Valid {
 		return VFAIL_SYNTAX
 	}
 
-	if ret.Disposable {
+	if verifier.IsDisposable(syntax.Domain) {
 		return VFAIL_DISPOSABLE
 	}
 
-	if !ret.HasMxRecords {
-		return VFAIL_MX
+	if mxEnabled {
+		mx, err := verifier.CheckMX(syntax.Domain)
+		if err != nil {
+			return VFAIL_MX
+		}
+		if !mx.HasMXRecord {
+			return VFAIL_MX
+		}
 	}
 
 	if smtpEnabled {
-		if ret.SMTP == nil {
+		smtp, err := verifier.CheckSMTP(syntax.Domain, syntax.Username)
+		if err != nil {
+			return VFAIL_SMTP
+		}
+
+		if smtp == nil {
 			return VFAIL_SMTP
 		}
 	}
@@ -280,7 +290,7 @@ func setEmailStatus(email string, status string) {
 	}
 }
 
-func validateAction(enableSMPTCheck bool, proxy string) {
+func validateAction(enableSMPTCheck bool, enableMX bool, proxy string) {
 	ensureStatusColumn()
 
 	if enableSMPTCheck {
@@ -320,7 +330,7 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		var email string
 		rows.Scan(&email)
 
-		if failures := validateEmail(email, enableSMPTCheck); failures != 0 {
+		if failures := validateEmail(email, enableSMPTCheck, enableMX); failures != 0 {
 			reason := failures.ToReadable()
 			// fmt.Printf("%s -> %s\n", email, reason)
 			setEmailStatus(email, "Failed: "+reason)
@@ -334,6 +344,20 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 
 	fmt.Printf("Validation Complete: %d valid, %d invalid\n", countValid, countInvalid)
 	logger.Printf("Validation Complete: %d valid, %d invalid", countValid, countInvalid)
+}
+
+func resetValidationStatus() {
+	query := fmt.Sprintf(
+		"ALTER TABLE %s DROP COLUMN \"%s\"",
+		config.TableName,
+		STATUS_COLUMN_NAME)
+
+	rows, err := db.Query(query)
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func main() {
@@ -361,6 +385,16 @@ func main() {
 
 	enableSMPTPtr := parser.Flag("", "enable-smtp", &argparse.Options{
 		Help:     "Enable SMTP checks. Effective with --validate option only.",
+		Required: false,
+	})
+
+	enableMXPtr := parser.Flag("", "enable-mx", &argparse.Options{
+		Help:     "Enable MX record check. Effective with --validate option only.",
+		Required: false,
+	})
+
+	forceValidatePtr := parser.Flag("", "force", &argparse.Options{
+		Help:     "Force re-validate all rows. Effective with --validate option only.",
 		Required: false,
 	})
 
@@ -425,10 +459,15 @@ func main() {
 		dedupAction()
 	} else { // validate
 		logger.Println("Validating emails")
+
+		if *forceValidatePtr {
+			resetValidationStatus()
+		}
+
 		var proxy string = ""
 		if proxyPtr != nil {
 			proxy = *proxyPtr
 		}
-		validateAction(*enableSMPTPtr, proxy)
+		validateAction(*enableSMPTPtr, *enableMXPtr, proxy)
 	}
 }
