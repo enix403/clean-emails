@@ -13,6 +13,7 @@ import (
 	"gopkg.in/ini.v1"
 
 	emailverifier "github.com/AfterShip/email-verifier"
+	progressbar "github.com/schollz/progressbar/v3"
 	"github.com/akamensky/argparse"
 )
 
@@ -279,23 +280,26 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 	countValid := 0
 	countInvalid := 0
 
+	totalEmails := countEmails()
+	bar := progressbar.Default(int64(totalEmails))
+
 	for rows.Next() {
 		var email string
 		rows.Scan(&email)
 
-		// email = "qateef2003@yahoo.com"
-
 		if failures := validateEmail(email, enableSMPTCheck); failures != 0 {
 			reason := failures.ToReadable()
-			fmt.Printf("%s -> %s\n", email, reason)
+			// fmt.Printf("%s -> %s\n", email, reason)
 			setEmailStatus(email, "Failed: "+reason)
 			countInvalid++
 		} else {
 			setEmailStatus(email, "Valid")
 			countValid++
 		}
+		bar.Add(1)
 	}
 
+	fmt.Printf("Validation Complete: %d valid, %d invalid\n", countValid, countInvalid)
 	logger.Printf("Validation Complete: %d valid, %d invalid", countValid, countInvalid)
 }
 
