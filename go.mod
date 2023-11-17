@@ -1,4 +1,4 @@
-module clean-emails
+module mailcat
 
 go 1.21.4
 

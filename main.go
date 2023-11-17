@@ -89,6 +89,48 @@ func countEmails() int {
 	return 0
 }
 
+func countValidEmails() int {
+	query := fmt.Sprintf("SELECT COUNT(*) from \"%s\" WHERE \"%s\" = 'Valid'",
+		config.TableName, STATUS_COLUMN_NAME)
+
+	rows, err := db.Query(query)
+	defer rows.Close()
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for rows.Next() {
+		var count int
+		rows.Scan(&count)
+		return count
+	}
+
+	return 0
+}
+
+func countUncheckedEmails() int {
+	query := fmt.Sprintf("SELECT COUNT(*) from \"%s\" WHERE \"%s\" = '' or \"%s\" IS NULL",
+		config.TableName, STATUS_COLUMN_NAME, STATUS_COLUMN_NAME)
+
+	rows, err := db.Query(query)
+	defer rows.Close()
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for rows.Next() {
+		var count int
+		rows.Scan(&count)
+		return count
+	}
+
+	return 0
+}
+
 func dedupAction() {
 	countBefore := countEmails()
 	query := fmt.Sprintf(`
@@ -151,26 +193,6 @@ func (mask FailureMask) ToReadable() string {
 		val = "Unknown error"
 	}
 	return val
-	/*
-		var sb strings.Builder
-
-		started := false
-
-		for failure, failureStr := range failBitToString {
-			if mask&failure != 0 {
-				if started {
-					sb.WriteByte('+')
-				} else {
-					started = true
-				}
-				sb.WriteString(failureStr)
-			}
-		}
-
-		// final := strings.TrimRight(sb.String(), "+")
-		return sb.String()
-	*/
-
 }
 
 var verifier = emailverifier.NewVerifier()
@@ -243,7 +265,8 @@ func ensureStatusColumn() {
 
 func setEmailStatus(email string, status string) {
 	query := fmt.Sprintf(
-		"UPDATE app_table SET \"%s\" = '%s' WHERE \"%s\" = '%s'",
+		"UPDATE %s SET \"%s\" = '%s' WHERE \"%s\" = '%s'",
+		config.TableName,
 		STATUS_COLUMN_NAME,
 		status,
 		config.EmailColumnName,
@@ -258,7 +281,6 @@ func setEmailStatus(email string, status string) {
 }
 
 func validateAction(enableSMPTCheck bool, proxy string) {
-
 	ensureStatusColumn()
 
 	if enableSMPTCheck {
@@ -269,7 +291,21 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		verifier.Proxy(proxy)
 	}
 
-	query := fmt.Sprintf("SELECT \"%s\" FROM \"%s\"", config.EmailColumnName, config.TableName)
+	countValid := countValidEmails()
+	countUnchecked := countUncheckedEmails()
+	totalEmails := countEmails()
+	// countUnchecked + countValid + countInvalid = totalEmails. Hence..
+	countInvalid := totalEmails - countUnchecked - countValid
+
+	query := fmt.Sprintf(`
+			SELECT "%s" FROM "%s"
+			WHERE "%s" = '' or "%s" IS NULL
+		`,
+		config.EmailColumnName,
+		config.TableName,
+		STATUS_COLUMN_NAME,
+		STATUS_COLUMN_NAME)
+
 	rows, err := db.Query(query)
 	defer rows.Close()
 	if err != nil {
@@ -277,11 +313,8 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		os.Exit(1)
 	}
 
-	countValid := 0
-	countInvalid := 0
-
-	totalEmails := countEmails()
 	bar := progressbar.Default(int64(totalEmails))
+	bar.Add(totalEmails - countUnchecked)
 
 	for rows.Next() {
 		var email string
@@ -304,7 +337,7 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 }
 
 func main() {
-	parser := argparse.NewParser("clean-emails", "Email Cleaner")
+	parser := argparse.NewParser("mailcat", "Email Cleaner")
 
 	configPathPtr := parser.StringPositional(&argparse.Options{
 		Help:     "Path of config file",

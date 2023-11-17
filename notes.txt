@@ -57,4 +57,68 @@ cleanemails config.txt [--debug] --dedup
 cleanemails config.txt [--debug] --validate
 cleanemails config.txt [--debug] --validate --enable-smtp
 
+------------------------------------------------------------------------------------------
 
+Hi there.
+
+Here's the script.
+
+First extract the zip file. Then open the folder where the extracted files are in a terminal.
+
+Now Run
+
+go build
+
+This will start building the script. Note that it might take some time to complete.
+
+Once the app is built, you can run it using ./mailcat binary. 
+
+The usage of the script is:
+
+./mailcat path/to/config.txt [other flags]
+
+---------------
+
+The fields of config.txt are the same as our previous csv2pg.py config.txt, but with one additional field:
+
+email_column_name = Email
+
+This is the name of the table column which holds the emails. This is case-sensitive, so make sure it matches exactly with the actual column name.
+An example config.txt is given in the delivered zip.
+
+---------------
+
+Nevertheless, the flags to mailcat are:
+
+--debug: Enables debug mode (logs to debug.log)
+
+--dedup: Remove rows with duplicate emails (deduplicates)
+
+--validate: Start the validation process.
+
+Note that you can pass either --dedup or --validate, but not both at the same time. If you want to perform both tasks then you'll need to run the script twice once for each task. For example:
+
+./mailcat path/to/config.txt --dedup
+./mailcat path/to/config.txt --validate
+
+There are some extra flags that are effective only when --validate is passed:
+
+--enable-smtp: (Optional) Enables the SMTP checks
+--proxy "<proxy_url>": (Optional) Uses the given SOCKS proxy (only effective when --enable-smtp is also passed)
+
+For instance:
+
+./mailcat path/to/config.txt --validate --enable-smtp --proxy "socks5://user:password@127.0.0.1:1080?timeout=5s"
+
+Make sure the format of the proxy is the same as given in this example (because the underlying validation library only supports this)
+
+Have a look and let me know your comments.
+
+Thanks
+
+------------------------------------------------------------------------------------------
+
+
+The progress indicator is shown when you pass the --validate.
+
+It is not shown for --dedup. The reason for this is the deduplication process in sent to the database as a single command, which the database process in one single go the removes the duplicate rows. So we can't really break that up into small chunks and show it in the form of a progress indicator. On the flip side though, the --dedup process should be fast enough that you won't even need a progress indicator, because it is just a single command (which is always faster than multiple commands)
