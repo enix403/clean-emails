@@ -3,7 +3,9 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
+	"io"
 	"strings"
 	// "encoding/json"
 
@@ -50,6 +52,8 @@ func readConfig(path string) *AppConfig {
 
 var db *sql.DB
 var config *AppConfig
+var debugMode bool = false
+var logger *log.Logger
 
 func createDBConnection() {
 	psqlInfo := fmt.Sprintf(
@@ -117,6 +121,7 @@ func dedupAction() {
 	numRemoved := countBefore - countAfter
 
 	fmt.Printf("Removed duplicates: %d row(s) deleted\n", numRemoved)
+	logger.Printf("Removed duplicates: %d row(s) deleted\n", numRemoved)
 }
 
 // 0 for valid
@@ -199,7 +204,7 @@ func validateEmail(email string, smtpEnabled bool) FailureMask {
 	return 0
 }
 
-const STATUS_COLUMN_NAME string = "email_status"
+const STATUS_COLUMN_NAME string = "Status"
 
 func ensureStatusColumn() {
 	query := fmt.Sprintf("SELECT column_name FROM information_schema.columns where table_name = '%s'", config.TableName)
@@ -271,6 +276,9 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		os.Exit(1)
 	}
 
+	countValid := 0
+	countInvalid := 0
+
 	for rows.Next() {
 		var email string
 		rows.Scan(&email)
@@ -280,12 +288,15 @@ func validateAction(enableSMPTCheck bool, proxy string) {
 		if failures := validateEmail(email, enableSMPTCheck); failures != 0 {
 			reason := failures.ToReadable()
 			fmt.Printf("%s -> %s\n", email, reason)
-			setEmailStatus(email, "Invalid: " + reason)
+			setEmailStatus(email, "Failed: "+reason)
+			countInvalid++
 		} else {
 			setEmailStatus(email, "Valid")
+			countValid++
 		}
 	}
 
+	logger.Printf("Validation Complete: %d valid, %d invalid", countValid, countInvalid)
 }
 
 func main() {
@@ -294,6 +305,11 @@ func main() {
 	configPathPtr := parser.StringPositional(&argparse.Options{
 		Help:     "Path of config file",
 		Required: true,
+	})
+
+	debugPtr := parser.Flag("", "debug", &argparse.Options{
+		Help:     "Enable debug mode",
+		Required: false,
 	})
 
 	dedupPtr := parser.Flag("p", "dedup", &argparse.Options{
@@ -349,14 +365,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	debugMode = *debugPtr
+
+	logger = log.New(io.Discard, "INFO: ", log.Ldate|log.Ltime)
+
+	if debugMode {
+		logfile, err := os.Create("debug.log")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer logfile.Close()
+		logger.SetOutput(logfile)
+	}
+
 	// Set global config
 	config = readConfig(configPath)
 
 	createDBConnection()
 
 	if dedup {
+		logger.Println("De duplicating emails")
 		dedupAction()
 	} else { // validate
+		logger.Println("Validating emails")
 		var proxy string = ""
 		if proxyPtr != nil {
 			proxy = *proxyPtr
