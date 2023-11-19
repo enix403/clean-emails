@@ -195,10 +195,13 @@ func (mask FailureMask) ToReadable() string {
 	return val
 }
 
-var verifier = emailverifier.NewVerifier()
+var verifier = emailverifier.
+	NewVerifier().
+	EnableAutoUpdateDisposable()
 
 func validateEmail(email string, smtpEnabled bool, mxEnabled bool) FailureMask {
 	email = strings.TrimSpace(email)
+	logger.Printf("validateEmail(\"%s\")", email)
 
 	if email == "" {
 		return VFAIL_NULL
@@ -288,6 +291,8 @@ func setEmailStatus(email string, status string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	logger.Printf("Email status set (\"%s\", %s)", email, status)
 }
 
 func validateAction(enableSMPTCheck bool, enableMX bool, proxy string) {
@@ -330,9 +335,11 @@ func validateAction(enableSMPTCheck bool, enableMX bool, proxy string) {
 		var email string
 		rows.Scan(&email)
 
-		if failures := validateEmail(email, enableSMPTCheck, enableMX); failures != 0 {
+		failures := validateEmail(email, enableSMPTCheck, enableMX)
+		logger.Printf("validationResult(\"%s\") -> %d", email, failures)
+
+		if failures != 0 {
 			reason := failures.ToReadable()
-			// fmt.Printf("%s -> %s\n", email, reason)
 			setEmailStatus(email, "Failed: "+reason)
 			countInvalid++
 		} else {
