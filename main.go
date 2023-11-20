@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	// "encoding/json"
 
@@ -199,12 +200,18 @@ var verifier = emailverifier.
 	NewVerifier().
 	EnableAutoUpdateDisposable()
 
+var emailRegex, _ = regexp.Compile(`^[\w-\.]+@([\w-]+\.)+[\w-]+$`)
+
 func validateEmail(email string, smtpEnabled bool, mxEnabled bool) FailureMask {
 	email = strings.TrimSpace(email)
 	logger.Printf("validateEmail(\"%s\")", email)
 
 	if email == "" {
 		return VFAIL_NULL
+	}
+
+	if !emailRegex.MatchString(email) {
+		return VFAIL_SYNTAX
 	}
 
 	syntax := verifier.ParseAddress(email)
