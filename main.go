@@ -285,14 +285,13 @@ func ensureStatusColumn() {
 
 func setEmailStatus(email string, status string) {
 	query := fmt.Sprintf(
-		"UPDATE %s SET \"%s\" = '%s' WHERE \"%s\" = '%s'",
+		"UPDATE %s SET \"%s\" = '%s' WHERE \"%s\" = $1",
 		config.TableName,
 		STATUS_COLUMN_NAME,
 		status,
-		config.EmailColumnName,
-		email)
+		config.EmailColumnName)
 
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, email)
 	defer rows.Close()
 	if err != nil {
 		fmt.Println(err)
